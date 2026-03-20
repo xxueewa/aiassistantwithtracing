@@ -1,0 +1,229 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: LangSmith RAG demo — API Gateway + Lambda + OpenSearch + LangChain + OpenAI
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 60
+    MemorySize: 512
+    Architectures:
+      - x86_64
+    VpcConfig:
+      # OpenSearch Service domain lives inside a VPC; Lambdas must join it.
+      SecurityGroupIds:
+        - !Ref LambdaSecurityGroup
+      SubnetIds: !Ref PrivateSubnetIds
+    Environment:
+      Variables:
+        # Secrets resolved from SSM SecureString at deploy time
+        OPENAI_API_KEY: !Sub "{{resolve:ssm:/langsmith-rag/openai-api-key}}"
+        LANGCHAIN_API_KEY: !Sub "{{resolve:ssm:/langsmith-rag/langsmith-api-key}}"
+        # LangSmith tracing
+        LANGCHAIN_TRACING_V2: "true"
+        LANGCHAIN_PROJECT: !Sub "langsmith-rag-${Environment}"
+        LANGCHAIN_ENDPOINT: "https://api.smith.langchain.com"
+        # OpenSearch
+        OPENSEARCH_ENDPOINT: !GetAtt OpenSearchDomain.DomainEndpoint
+        OPENSEARCH_INDEX: "rag-documents"
+        AWS_ACCOUNT_REGION: !Ref AWS::Region
+        # Models
+        EMBEDDING_MODEL: "text-embedding-3-small"
+        CHAT_MODEL: "gpt-4o-mini"
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment environment
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC that hosts the OpenSearch domain
+
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Private subnets (at least one) for Lambda + OpenSearch
+
+  OpenSearchDataNodeCount:
+    Type: Number
+    Default: 1
+    Description: Number of OpenSearch data nodes (use 2+ for HA in prod)
+
+  OpenSearchInstanceType:
+    Type: String
+    Default: t3.small.search
+    Description: OpenSearch instance type
+
+Resources:
+  # ── Security Groups ───────────────────────────────────────────────────────────
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for RAG Lambda functions"
+      VpcId: !Ref VpcId
+
+  OpenSearchSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for OpenSearch domain"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref LambdaSecurityGroup
+
+  # ── Lambda Layer (shared deps + custom modules) ───────────────────────────────
+  SharedLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub "langsmith-rag-shared-${Environment}"
+      Description: "LangChain, LangSmith, opensearch-py, and shared Python modules"
+      ContentUri: src/shared/
+      CompatibleRuntimes:
+        - python3.11
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: python3.11
+
+  # ── IAM role shared by both Lambda functions ──────────────────────────────────
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "langsmith-rag-lambda-role-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: OpenSearchAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - es:ESHttpGet
+                  - es:ESHttpPost
+                  - es:ESHttpPut
+                  - es:ESHttpDelete
+                  - es:ESHttpHead
+                Resource: !Sub "arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/langsmith-rag-${Environment}/*"
+        - PolicyName: SSMReadSecrets
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/langsmith-rag/*"
+
+  # ── Amazon OpenSearch Service domain ─────────────────────────────────────────
+  OpenSearchDomain:
+    Type: AWS::OpenSearchService::Domain
+    Properties:
+      DomainName: !Sub "langsmith-rag-${Environment}"
+      EngineVersion: "OpenSearch_2.13"
+      ClusterConfig:
+        InstanceType: !Ref OpenSearchInstanceType
+        InstanceCount: !Ref OpenSearchDataNodeCount
+        # Enable ZoneAwareness only when using 2+ nodes
+        ZoneAwarenessEnabled: false
+      EBSOptions:
+        EBSEnabled: true
+        VolumeType: gp3
+        VolumeSize: 20          # GB — increase for large corpora
+      VPCOptions:
+        SecurityGroupIds:
+          - !Ref OpenSearchSecurityGroup
+        SubnetIds:
+          - !Select [0, !Ref PrivateSubnetIds]
+      EncryptionAtRestOptions:
+        Enabled: true
+      NodeToNodeEncryptionOptions:
+        Enabled: true
+      DomainEndpointOptions:
+        EnforceHTTPS: true
+      AccessPolicies:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !GetAtt LambdaExecutionRole.Arn
+            Action: "es:*"
+            Resource: !Sub "arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/langsmith-rag-${Environment}/*"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ── API Gateway ───────────────────────────────────────────────────────────────
+  Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "langsmith-rag-api-${Environment}"
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+
+  # ── Query Lambda — POST /query ────────────────────────────────────────────────
+  QueryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "langsmith-rag-query-${Environment}"
+      CodeUri: src/query/
+      Handler: app.handler
+      Description: "Retrieves context from OpenSearch and generates an answer via OpenAI"
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Layers:
+        - !Ref SharedLayer
+      Events:
+        QueryApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /query
+            Method: post
+
+  # ── Ingest Lambda — POST /ingest ──────────────────────────────────────────────
+  IngestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "langsmith-rag-ingest-${Environment}"
+      CodeUri: src/ingest/
+      Handler: app.handler
+      Description: "Splits and embeds documents then indexes them in OpenSearch"
+      MemorySize: 1024
+      Timeout: 300
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Layers:
+        - !Ref SharedLayer
+      Events:
+        IngestApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /ingest
+            Method: post
+
+Outputs:
+  ApiUrl:
+    Description: Base URL for the API
+    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
+  QueryEndpoint:
+    Description: POST /query endpoint
+    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/query"
+  IngestEndpoint:
+    Description: POST /ingest endpoint
+    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/ingest"
+  OpenSearchDomainEndpoint:
+    Description: OpenSearch Service domain endpoint
+    Value: !GetAtt OpenSearchDomain.DomainEndpoint
