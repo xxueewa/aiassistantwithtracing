@@ -6,9 +6,6 @@ Smoke-test the deployed (or locally running) API.
 Usage:
   # Against local SAM:
   API_URL=http://localhost:3000 python scripts/test_api.py
-
-  # Against deployed stack:
-  API_URL=https://<id>.execute-api.us-east-1.amazonaws.com/dev python scripts/test_api.py
 """
 
 import json

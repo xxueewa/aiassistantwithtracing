@@ -16,13 +16,13 @@ Response body:
 import json
 import logging
 
-from config import get_config, setup_langsmith
-from rag_chain import run_rag_chain
+from config.config import get_config, setup_langsmith
+from services.rag_chain import run_rag_chain
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Config is initialised once per Lambda execution environment (warm-start opt.)
+
 _config = None
 
 

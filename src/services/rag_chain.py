@@ -19,8 +19,8 @@ from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from langchain_openai import ChatOpenAI
 from langsmith import traceable
 
-from config import Config
-from vector_store_aws import get_embeddings, get_vector_store
+from config.config import Config
+from vector_store_local import create_vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def _format_docs(docs) -> str:
 def run_rag_chain(question: str, config: Config) -> dict[str, Any]:
     """
     Full RAG pipeline:
-      1. Embed the question and k-NN search OpenSearch for top-k chunks.
+      1. Embed the question and search for top-k chunks.
       2. Build a prompt with the retrieved context.
       3. Call the OpenAI chat model for the final answer.
 
@@ -56,14 +56,8 @@ def run_rag_chain(question: str, config: Config) -> dict[str, Any]:
     run. All LangChain sub-calls (retriever, LLM, prompt) appear as children
     in the trace tree, giving end-to-end observability in LangSmith.
     """
-    embeddings = get_embeddings(config.embedding_model)
-    vs = get_vector_store(
-        endpoint=config.opensearch_endpoint,
-        index_name=config.opensearch_index,
-        embeddings=embeddings,
-        region=config.aws_region,
-    )
 
+    vs = create_vector_store(embedding_model=config.embedding_model)
     retriever = vs.as_retriever(
         search_type="similarity",
         search_kwargs={"k": 4},
