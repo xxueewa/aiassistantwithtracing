@@ -1,5 +1,5 @@
 """
-vector_store.py
+vector_store_aws.py
 ---------------
 Vector store backed by Amazon OpenSearch Service (serverless-friendly).
 
@@ -9,6 +9,8 @@ handles both indexing and k-NN similarity search.
 
 Lambda warm-start:  the OpenSearchVectorSearch client is cached at module
 level so repeated invocations reuse the same HTTP connection pool.
+
+integrate later after dev completed
 """
 
 import logging

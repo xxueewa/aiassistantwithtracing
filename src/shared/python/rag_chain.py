@@ -20,7 +20,7 @@ from langchain_openai import ChatOpenAI
 from langsmith import traceable
 
 from config import Config
-from vector_store import get_embeddings, get_vector_store
+from vector_store_aws import get_embeddings, get_vector_store
 
 logger = logging.getLogger(__name__)
 

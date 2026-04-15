@@ -19,7 +19,7 @@ import logging
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from config import get_config, setup_langsmith
-from vector_store import get_embeddings, upsert_documents
+from vector_store_local import get_embeddings, upsert_documents
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -66,7 +66,7 @@ def handler(event: dict, context) -> dict:
             200,
             {
                 "message": (
-                    f"Successfully ingested {len(texts)} document(s) "
+                    f"Successfully ingested document with size: {len(texts)}"
                     f"as {len(documents)} chunk(s)."
                 ),
                 "chunks_added": len(documents),
