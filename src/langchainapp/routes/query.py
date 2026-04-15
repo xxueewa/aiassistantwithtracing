@@ -15,35 +15,35 @@ Response body:
 
 import json
 import logging
+from fastapi import APIRouter
+from pydantic import BaseModel
 
-from config.config import get_config, setup_langsmith
-from services.rag_chain import run_rag_chain
+from src.config.config import config_instance
+from src.langchainapp.services.rag_chain import run_rag_chain
+
+
+class QueryRequest(BaseModel):
+    question: str
+    context: str
+
+router = APIRouter()
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+@router.post("")
+def query(event: QueryRequest):
+    return handler(event)
 
-_config = None
-
-
-def _get_config():
-    global _config
-    if _config is None:
-        _config = get_config()
-        setup_langsmith(_config)
-    return _config
-
-
-def handler(event: dict, context) -> dict:
+def handler(event: QueryRequest) -> dict:
     try:
-        config = _get_config()
-        body = json.loads(event.get("body") or "{}")
-        question = body.get("question", "").strip()
+
+        question = event.question.strip()
 
         if not question:
             return _resp(400, {"error": "Missing 'question' in request body."})
 
-        result = run_rag_chain(question, config)
+        result = run_rag_chain(question)
         return _resp(200, result)
 
     except Exception as exc:

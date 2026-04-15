@@ -1,0 +1,4 @@
+version = 0.1
+
+[tool.fastapi]
+entrypoint = "src.main:app"

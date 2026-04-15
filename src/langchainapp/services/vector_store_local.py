@@ -3,7 +3,6 @@ Vector store utilities for local development.
 """
 from uuid import uuid4
 
-from config.config import Config
 from langchain_chroma import Chroma
 import logging
 from langchain_core.documents import Document

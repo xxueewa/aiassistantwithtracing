@@ -19,8 +19,8 @@ from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from langchain_openai import ChatOpenAI
 from langsmith import traceable
 
-from config.config import Config
-from vector_store_local import create_vector_store
+from src.config.config import config_instance
+from src.langchainapp.services.vector_store_local import create_vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ def _format_docs(docs) -> str:
 
 
 @traceable(name="rag-query", tags=["rag", "openai"])
-def run_rag_chain(question: str, config: Config) -> dict[str, Any]:
+def run_rag_chain(question: str) -> dict[str, Any]:
     """
     Full RAG pipeline:
       1. Embed the question and search for top-k chunks.
@@ -57,13 +57,13 @@ def run_rag_chain(question: str, config: Config) -> dict[str, Any]:
     in the trace tree, giving end-to-end observability in LangSmith.
     """
 
-    vs = create_vector_store(embedding_model=config.embedding_model)
+    vs = create_vector_store(embedding_model=config_instance.embedding_model)
     retriever = vs.as_retriever(
         search_type="similarity",
         search_kwargs={"k": 4},
     )
 
-    llm = ChatOpenAI(model=config.chat_model, temperature=0)
+    llm = ChatOpenAI(model=config_instance.chat_model, temperature=0)
 
     # Build a LCEL chain:
     #   question → (retrieve context | passthrough question) → prompt → LLM → parse

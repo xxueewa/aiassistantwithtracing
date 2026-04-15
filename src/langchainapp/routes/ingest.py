@@ -12,36 +12,34 @@ Expected request body:
 Response body:
   { "message": "...", "chunks_added": 12 }
 """
-
+from fastapi import APIRouter
 import json
 import logging
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pydantic import BaseModel
 
-from config import get_config, setup_langsmith
-from vector_store_local import get_embeddings, upsert_documents
+from src.config.config import config_instance
+from src.langchainapp.services.vector_store_local import get_embeddings, upsert_documents
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-_config = None
+router = APIRouter()
 
+class IngestRequest(BaseModel):
+    texts: list[str]
+    metadata: list[dict]
 
-def _get_config():
-    global _config
-    if _config is None:
-        _config = get_config()
-        setup_langsmith(_config)
-    return _config
+@router.post("")
+def ingest_documents(request: IngestRequest):
+    return handler(request, None)
 
-
-def handler(event: dict, context) -> dict:
+def handler(event: IngestRequest, context) -> dict:
     try:
-        config = _get_config()
-        body = json.loads(event.get("body") or "{}")
 
-        texts: list[str] = body.get("texts", [])
-        metadata_list: list[dict] = body.get("metadata", [{}] * len(texts))
+        texts: list[str] = event.texts
+        metadata_list: list[dict] = event.metadata
 
         if not texts:
             return _resp(400, {"error": "Missing 'texts' in request body."})
@@ -53,13 +51,13 @@ def handler(event: dict, context) -> dict:
         )
         documents = splitter.create_documents(texts, metadatas=metadata_list)
 
-        embeddings = get_embeddings(config.embedding_model)
+        embeddings = get_embeddings(config_instance.embedding_model)
         upsert_documents(
             documents=documents,
-            endpoint=config.opensearch_endpoint,
-            index_name=config.opensearch_index,
+            endpoint=config_instance.opensearch_endpoint,
+            index_name=config_instance.opensearch_index,
             embeddings=embeddings,
-            region=config.aws_region,
+            region=config_instance.aws_region,
         )
 
         return _resp(
