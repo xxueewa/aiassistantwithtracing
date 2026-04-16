@@ -44,3 +44,4 @@ The evaluation service is designed to enhance the system's performance after the
 ### Milestone
 - [x] 2026-04-16: Completed project basic functions and set up the tracing: https://shidemuxue.atlassian.net/wiki/x/AQAo
 - [] 2026-04-xx: select the search method and evaluate the retrieval performance
+- [] 2026-04-xx: 
