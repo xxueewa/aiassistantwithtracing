@@ -9,6 +9,7 @@ parameters — never hard-coded here.
 import os
 import logging
 from dataclasses import dataclass
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
@@ -17,10 +18,10 @@ class Config:
     # OpenAI
     openai_api_key: str
     # LangSmith
-    langchain_api_key: str
-    langchain_project: str
-    langchain_tracing_v2: bool
-    langchain_endpoint: str
+    langsmith_api_key: str
+    langsmith_project: str
+    langsmith_tracing_v2: bool
+    langsmith_endpoint: str
     # OpenSearch
     opensearch_endpoint: str   # host only, no https:// prefix
     opensearch_index: str
@@ -29,12 +30,15 @@ class Config:
     embedding_model: str
     chat_model: str
 
-config_instance = Config(
+
+def create_config() -> Config:
+    load_dotenv()
+    return Config(
         openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
-        langchain_api_key=os.environ.get("LANGCHAIN_API_KEY", ""),
-        langchain_project=os.environ.get("LANGCHAIN_PROJECT", "langsmith-rag-demo"),
-        langchain_tracing_v2=os.environ.get("LANGCHAIN_TRACING_V2", "true").lower() == "true",
-        langchain_endpoint=os.environ.get("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com"),
+        langsmith_api_key=os.environ.get("LANGSMITH_API_KEY", ""),
+        langsmith_project=os.environ.get("LANGSMITH_PROJECT", "langsmith-rag-demo"),
+        langsmith_tracing_v2=os.environ.get("LANGSMITH_TRACING", "true").lower() == "true",
+        langsmith_endpoint=os.environ.get("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com"),
         opensearch_endpoint=os.environ.get("OPENSEARCH_ENDPOINT", ""),
         opensearch_index=os.environ.get("OPENSEARCH_INDEX", "rag-documents"),
         aws_region=os.environ.get("AWS_REGION", "us-east-1"),

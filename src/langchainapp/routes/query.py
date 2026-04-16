@@ -18,7 +18,7 @@ import logging
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from src.config.config import config_instance
+from src.config.config import create_config
 from src.langchainapp.services.rag_chain import run_rag_chain
 
 
@@ -27,7 +27,7 @@ class QueryRequest(BaseModel):
     context: str
 
 router = APIRouter()
-
+config_instance = create_config()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 

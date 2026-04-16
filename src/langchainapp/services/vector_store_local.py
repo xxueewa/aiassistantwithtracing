@@ -7,13 +7,16 @@ from langchain_chroma import Chroma
 import logging
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
+from src.config.config import create_config
 
 logger = logging.getLogger(__name__)
+config_instance = create_config()
 
 # ── Embedding helper ──────────────────────────────────────────────────────────
 
 def get_embeddings(model: str) -> OpenAIEmbeddings:
-    return OpenAIEmbeddings(model=model)
+    print(f"Using apikey: {config_instance.openai_api_key}")
+    return OpenAIEmbeddings(model=model, api_key=config_instance.openai_api_key)
 
 # ── Create Vector Store ──────────────────────────────────────────────────────────
 
@@ -31,7 +34,7 @@ def upsert_documents(vs: Chroma, documents: list[Document]):
     """
     uuids = [str(uuid4()) for _ in range(len(documents))]
     vs.add_documents(documents, ids=uuids)
-    logger.info("Upserted %d document(s) into index '%s'.", len(documents), vs.collection_name)
+    logger.info("Upserted %d document(s) into index '%s'.", len(documents))
 
 # ── Document deletion ────────────────────────────────────────────────────────
 

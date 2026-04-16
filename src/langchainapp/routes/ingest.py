@@ -18,14 +18,16 @@ import logging
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel
+from langsmith import traceable
 
-from src.config.config import config_instance
-from src.langchainapp.services.vector_store_local import get_embeddings, upsert_documents
+from src.config.config import create_config
+from src.langchainapp.services.vector_store_local import get_embeddings, upsert_documents, create_vector_store
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 router = APIRouter()
+config_instance = create_config()
 
 class IngestRequest(BaseModel):
     texts: list[str]
@@ -35,6 +37,7 @@ class IngestRequest(BaseModel):
 def ingest_documents(request: IngestRequest):
     return handler(request, None)
 
+@traceable(name="ingest_doc", tags=["rag", "openai"])
 def handler(event: IngestRequest, context) -> dict:
     try:
 
@@ -52,12 +55,11 @@ def handler(event: IngestRequest, context) -> dict:
         documents = splitter.create_documents(texts, metadatas=metadata_list)
 
         embeddings = get_embeddings(config_instance.embedding_model)
+
+        vs = create_vector_store(config_instance.embedding_model)
         upsert_documents(
-            documents=documents,
-            endpoint=config_instance.opensearch_endpoint,
-            index_name=config_instance.opensearch_index,
-            embeddings=embeddings,
-            region=config_instance.aws_region,
+            vs=vs,
+            documents=documents
         )
 
         return _resp(
