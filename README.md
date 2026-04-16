@@ -9,6 +9,7 @@ It ensures the proper execution of each step, and would be used to troubleshoot 
 The evaluation service is designed to enhance the system's performance after the basic functionalities are completed.
 
 ### High-level Architecture
+<img width="3326" height="2442" alt="High-Level-Design (langchain project))" src="https://github.com/user-attachments/assets/ab4ed659-ce29-4fd7-abb3-b68a1de504b0" />
 
 
 ### Key Component
