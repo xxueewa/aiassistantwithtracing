@@ -24,7 +24,6 @@ from src.langchainapp.services.rag_chain import run_rag_chain
 
 class QueryRequest(BaseModel):
     question: str
-    context: str
 
 router = APIRouter()
 config_instance = create_config()
@@ -55,5 +54,6 @@ def _resp(status: int, body: dict) -> dict:
     return {
         "statusCode": status,
         "headers": {"Content-Type": "application/json"},
-        "body": json.dumps(body),
+        "answer": body.get("answer", ""),
+        "source_documents": body.get("source_documents", []),
     }

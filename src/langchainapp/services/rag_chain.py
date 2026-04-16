@@ -27,9 +27,9 @@ config_instance = create_config()
 
 RAG_SYSTEM_PROMPT = (
     "You are a helpful assistant. Use the retrieved context below to answer "
-    "the user's question as accurately as possible.\n"
+    "the user's question as accurately and concisely as possible.\n"
     "If the context does not contain enough information, say so clearly "
-    "rather than making something up.\n\n"
+    "rather than making something up. Keep the answer less than 150 words.\n\n"
     "Context:\n{context}"
 )
 
