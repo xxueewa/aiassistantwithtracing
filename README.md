@@ -41,3 +41,5 @@ The evaluation service is designed to enhance the system's performance after the
      - Exact match: classify tasks with known labels
      - Reference-based LLM-as-judge: comparing output quality to a reference answer
 
+### Milestone
+- [x] 2026-04-16: Completed project basic functions and set up the tracing: https://shidemuxue.atlassian.net/wiki/x/AQAo
