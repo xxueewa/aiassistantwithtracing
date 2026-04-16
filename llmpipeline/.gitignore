@@ -49,7 +49,7 @@ htmlcov/
 *~
 
 # Chroma vector database
-chroma_db/
+llmpipeline/chroma_db/
 
 # Logs
 *.log

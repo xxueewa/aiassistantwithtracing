@@ -8,15 +8,11 @@ Usage:
   API_URL=http://localhost:3000 python scripts/test_api.py
 """
 
-import json
 import os
-import sys
-
-import requests
 
 BASE_URL = os.environ.get("API_URL", "http://localhost:3000").rstrip("/")
-from src.config.config import create_config
-from src.langchainapp.services.vector_store_local import create_vector_store
+from config.config import create_config
+from langchainapp.services.vector_store_local import create_vector_store
 
 
 # def test_ingest() -> None:

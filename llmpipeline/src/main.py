@@ -1,5 +1,7 @@
 from fastapi import FastAPI
-from src.langchainapp.routes import ingest, query
+from langchainapp.routes import ingest
+from langchainapp.routes import query
+
 app = FastAPI()
 @app.get("/")
 async def root():

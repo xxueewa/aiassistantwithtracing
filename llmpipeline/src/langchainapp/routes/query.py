@@ -13,13 +13,12 @@ Response body:
   }
 """
 
-import json
 import logging
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from src.config.config import create_config
-from src.langchainapp.services.rag_chain import run_rag_chain
+from config.config import create_config
+from langchainapp.services.rag_chain import run_rag_chain
 
 
 class QueryRequest(BaseModel):

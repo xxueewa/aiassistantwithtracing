@@ -19,8 +19,8 @@ from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from langchain_openai import ChatOpenAI
 from langsmith import traceable
 
-from src.config.config import create_config
-from src.langchainapp.services.vector_store_local import create_vector_store
+from config.config import create_config
+from langchainapp.services.vector_store_local import create_vector_store
 
 logger = logging.getLogger(__name__)
 config_instance = create_config()
