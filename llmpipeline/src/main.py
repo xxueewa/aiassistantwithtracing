@@ -1,6 +1,6 @@
 from fastapi import FastAPI
-from langchainapp.routes import ingest
-from langchainapp.routes import query
+from .langchainapp.routes import ingest
+from .langchainapp.routes import query
 
 app = FastAPI()
 @app.get("/")

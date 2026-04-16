@@ -20,8 +20,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel
 from langsmith import traceable
 
-from config.config import create_config
-from langchainapp.services.vector_store_local import get_embeddings, upsert_documents, create_vector_store
+from src.config.config import create_config
+from src.langchainapp.services.vector_store_local import get_embeddings, upsert_documents, create_vector_store
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

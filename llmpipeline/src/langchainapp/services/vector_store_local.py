@@ -7,7 +7,7 @@ from langchain_chroma import Chroma
 import logging
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
-from config.config import create_config
+from src.config.config import create_config
 
 logger = logging.getLogger(__name__)
 config_instance = create_config()
