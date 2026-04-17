@@ -25,7 +25,7 @@ pip install -e . "langgraph-cli[inmem]"
 2. (Optional) Customize the code and project as needed. Create a `.env` file if you need to use secrets.
 
 ```bash
-cp .env.example .env
+cp .env .env
 ```
 
 If you want to enable LangSmith tracing, add your LangSmith API key to the `.env` file.
