@@ -5,11 +5,15 @@ Returns a predefined response. Replace logic and configuration as needed.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from langchain.tools import tool
 from typing import Any, Dict
 
 from langchain_core.messages import SystemMessage, ToolMessage, AnyMessage
 from langgraph.graph import StateGraph, START, END
+from langgraph.prebuilt import ToolNode
+from langgraph.runtime import Runtime
 from pydantic import SecretStr
 from typing_extensions import TypedDict, Annotated, Literal
 from langchain_openai import ChatOpenAI
@@ -56,22 +60,22 @@ def subtract(a: int, b: int) -> int:
     return a - b
 
 tools =[add, subtract, multiply, divide]
-tools_by_name = {tool.name: tool for tool in tools}
+# tools_by_name = {tool.name: tool for tool in tools}
+tool_node = ToolNode(tools=tools)
 model_with_tools = llm.bind_tools(tools)
 
 class Context(TypedDict):
-    """Context parameters for the agent.
+    """Context parameters for the calculator.
 
     Set these when creating assistants OR when invoking the graph.
     See: https://langchain-ai.github.io/langgraph/cloud/how-tos/configuration_cloud/
     """
-
-    my_configurable_param: str
+    session: str
 
 
 # @dataclass
 # class State:
-#     """Input state for the agent.
+#     """Input state for the calculator.
 #
 #     Defines the initial structure of incoming data.
 #     See: https://langchain-ai.github.io/langgraph/concepts/low_level/#state
@@ -79,8 +83,10 @@ class Context(TypedDict):
 #     messages: str
 #     llm_calls: 0
 
+@dataclass
 class MessagesState(TypedDict):
     messages: Annotated[list[AnyMessage], operator.add]
+    # operator.add is used to concatenate lists [MSG1] -> [MSG1, MSG2]
     llm_calls: int
 
 def llm_call(state: dict) -> Dict[str, Any]:
@@ -105,11 +111,10 @@ def llm_call(state: dict) -> Dict[str, Any]:
 def tool(state: dict):
     """
     This is a description of my tool.
-    It takes two parameters: param1 (string) and param2 (integer).
     """
     result = []
     for tool_call in state["messages"][-1].tool_calls:
-        tool = tools_by_name[tool_call["name"]]
+        tool = tool_node.tools_by_name[tool_call["name"]]
         observation = tool.invoke(tool_call["args"])
         result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"]))
     return {"messages": result}
@@ -144,3 +149,4 @@ agent.add_conditional_edges(
 
 agent.add_edge("tool", "llm_call")
 graph = agent.compile(name="calculator")
+graph.invoke({"user_input":"My"})

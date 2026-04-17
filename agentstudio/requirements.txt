@@ -1,0 +1,17 @@
+# google calendar api
+google-api-python-client  # Google Calendar
+caldav                     # CalDAV (iCloud, Outlook, etc.)
+
+
+# LangChain ecosystem
+langchain
+langchain-openai
+langchain-community
+langchain-text-splitters
+langsmith
+langgraph
+
+# Utilities
+pydantic
+
+
