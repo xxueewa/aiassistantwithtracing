@@ -5,19 +5,27 @@ Returns a predefined response. Replace logic and configuration as needed.
 
 from __future__ import annotations
 
-from langchain.tools import tool
+from dataclasses import dataclass
+
+from langchain.tools import tool, ToolRuntime
 from typing import Any, Dict
 
 from langchain_core.messages import SystemMessage, ToolMessage, AnyMessage
-from langgraph.graph import StateGraph, START, END
+from langchain_core.messages.utils import count_tokens_approximately
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, START, END, MessagesState
+from langgraph.prebuilt import ToolNode
+from langmem.short_term import SummarizationNode, RunningSummary
 from pydantic import SecretStr
 from typing_extensions import TypedDict, Annotated, Literal
-from langchain_openai import ChatOpenAI
 import operator
 import os
 
 apiKey = SecretStr(os.environ["OPENAI_API_KEY"])
+
 llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0, api_key=apiKey)
+llm_with_summary = llm.bind(max_tokens=128)
 
 @tool
 def multiply(a: int, b: int) -> int:
@@ -56,34 +64,49 @@ def subtract(a: int, b: int) -> int:
     return a - b
 
 tools =[add, subtract, multiply, divide]
-tools_by_name = {tool.name: tool for tool in tools}
+# tools_by_name = {tool.name: tool for tool in tools}
+tool_node = ToolNode(tools=tools)
 model_with_tools = llm.bind_tools(tools)
 
-class Context(TypedDict):
-    """Context parameters for the agent.
+class State(MessagesState):
+    # extend from MessageState: messages # operator.add is used to concatenate lists [MSG1] -> [MSG1, MSG2]
+    context: dict[str, RunningSummary]
 
-    Set these when creating assistants OR when invoking the graph.
-    See: https://langchain-ai.github.io/langgraph/cloud/how-tos/configuration_cloud/
-    """
+class LLMMessagesState(TypedDict):
+    context: dict[str, RunningSummary]
+    summarized_messages: list[AnyMessage]
 
-    my_configurable_param: str
+initial_summary_prompt = ChatPromptTemplate.from_messages([
+    (
+        "human",
+        "Summarize the conversation below. Focus on key decisions, "
+        "user preferences, and important facts. Be concise.\n\n"
+        "Conversation:\n{messages}"
+    )
+])
 
+existing_summary_prompt = ChatPromptTemplate.from_messages([
+    (
+        "human",
+        "Update the existing summary with the new messages. "
+        "Keep key decisions, user preferences, and important facts. "
+        "Discard the outdated information from existing_summary.\n\n"
+        "Existing summary:\n{existing_summary}\n\n"
+        "New messages:\n{messages}"
+    )
+])
 
-# @dataclass
-# class State:
-#     """Input state for the agent.
-#
-#     Defines the initial structure of incoming data.
-#     See: https://langchain-ai.github.io/langgraph/concepts/low_level/#state
-#     """
-#     messages: str
-#     llm_calls: 0
+summarization_node = SummarizationNode(
+    token_counter=count_tokens_approximately,
+    model=llm_with_summary,
+    max_tokens=256,
+    max_tokens_before_summary=256,
+    max_summary_tokens=128,
+    initial_summary_prompt=initial_summary_prompt,  # ← first summary
+    existing_summary_prompt=existing_summary_prompt,  # ← update summary
+)
 
-class MessagesState(TypedDict):
-    messages: Annotated[list[AnyMessage], operator.add]
-    llm_calls: int
-
-def llm_call(state: dict) -> Dict[str, Any]:
+def llm_call(state: LLMMessagesState) -> Dict[str, Any]:
     """
     This is a description of my tool.
     It takes two parameters: param1 (string) and param2 (integer).
@@ -93,23 +116,21 @@ def llm_call(state: dict) -> Dict[str, Any]:
             model_with_tools.invoke(
                 [
                     SystemMessage(
-                        content="You are a helpful assistant tasked with performing arithmetic on a set of inputs."
+                        content="You are a helpful assistant tasked with performing arithmetic on a set of inputs. Your name is @$%#$^"
                     )
                 ]
-                + state["messages"]
+                + state["summarized_messages"]
             )
-        ],
-        "llm_calls": state.get('llm_calls', 0) + 1
+        ]
     }
 
 def tool(state: dict):
     """
     This is a description of my tool.
-    It takes two parameters: param1 (string) and param2 (integer).
     """
     result = []
     for tool_call in state["messages"][-1].tool_calls:
-        tool = tools_by_name[tool_call["name"]]
+        tool = tool_node.tools_by_name[tool_call["name"]]
         observation = tool.invoke(tool_call["args"])
         result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"]))
     return {"messages": result}
@@ -130,17 +151,21 @@ def should_continue(state: MessagesState) -> Literal["tool", END]:
     return END
 
 # Define the graph
-agent = StateGraph(MessagesState)
+agent = StateGraph(State)
 
+agent.add_node("summarization", summarization_node)
 agent.add_node("llm_call", llm_call)
-agent.add_node("tool", tool)
+agent.add_node("tool", tool_node)
 
-agent.add_edge(START, "llm_call")
+agent.add_edge(START, "summarization")
+agent.add_edge("summarization", "llm_call")
+
 agent.add_conditional_edges(
     "llm_call",
     should_continue,
     ["tool", END]
 )
 
-agent.add_edge("tool", "llm_call")
+agent.add_edge("tool", "summarization")
+
 graph = agent.compile(name="calculator")
