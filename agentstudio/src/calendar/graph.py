@@ -19,8 +19,8 @@ import os
 # store = EventKit.EKEventStore.alloc().init()
 # store.requestAccessToEntityType_completion_(0, lambda granted, error: None)
 
-creds = Credentials.from_authorized_user_file("token.json")
-service = build("calendar", "v3", credentials=creds)
+# creds = Credentials.from_authorized_user_file("token.json")
+# service = build("calendar", "v3", credentials=creds)
 
 class MessagesState(TypedDict):
     messages: Annotated[list[AnyMessage], operator.add]

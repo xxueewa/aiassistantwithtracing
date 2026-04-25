@@ -5,11 +5,15 @@ caldav                     # CalDAV (iCloud, Outlook, etc.)
 
 # LangChain ecosystem
 langchain
+langchain-core
 langchain-openai
 langchain-community
 langchain-text-splitters
 langsmith
 langgraph
+langgraph-sdk
+langgraph-cli
+langmem
 
 # Utilities
 pydantic
