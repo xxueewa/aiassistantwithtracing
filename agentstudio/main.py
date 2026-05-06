@@ -5,7 +5,16 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 import json
 
-from pydantic import BaseModel
+import numpy as np
+import sounddevice as sd
+import openai
+from pydub import AudioSegment
+import io
+import os
+from dotenv import load_dotenv
+from pydantic import BaseModel, SecretStr
+
+load_dotenv()
 
 class ChatRequest(BaseModel):
     message: str
@@ -64,3 +73,19 @@ async def chat_stream(req: ChatRequest):
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+@app.post("/chat/dummyaudio")
+async def chat_tts():
+    def generate_tone(frequency=440, duration=1.0, samplerate=22050):
+        t = np.linspace(0, duration, int(samplerate * duration), endpoint=False)
+        samples = 0.5 * np.sin(2 * np.pi * frequency * t).astype(np.float32)
+        return samples, samplerate
+
+
+    samples, samplerate = generate_tone(440, 1.0, 22050)
+    sd.play(samples, samplerate)
+    sd.wait() #block until finished
+
+    return {"status": "played"}
+
+
