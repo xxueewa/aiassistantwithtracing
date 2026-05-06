@@ -50,6 +50,7 @@ async def chat_stream(req: ChatRequest):
     async def generate():
         # yield thread_id first so client has it immediately
         yield f"data: {json.dumps({'thread_id': thread_id})}\n\n"
+        yield f"data: {json.dumps({'initial question': req.message})}\n\n"
 
         async for chunk in client.runs.stream(
             thread_id,
@@ -58,9 +59,7 @@ async def chat_stream(req: ChatRequest):
             stream_mode="messages",   # "messages" gives token-by-token, "values" gives full state
         ):
             if chunk.data and chunk.event == "messages/partial":
-                for msg in chunk.data:
-                    if msg.get("type") == "AIMessageChunk":
-                        yield f"data: {json.dumps({'token': msg['content']})}\n\n"
+                yield f"data: {json.dumps({'type':chunk.event, 'token': chunk.data})}\n\n"
 
         yield "data: [DONE]\n\n"
 
