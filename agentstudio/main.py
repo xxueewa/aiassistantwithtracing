@@ -1,3 +1,6 @@
+import io
+import wave
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from langgraph_sdk import get_client
@@ -7,12 +10,10 @@ import json
 
 import numpy as np
 import sounddevice as sd
-import openai
-from pydub import AudioSegment
-import io
-import os
+import asyncio
 from dotenv import load_dotenv
 from pydantic import BaseModel, SecretStr
+from src.services.sst_stream import record_until_silence
 
 load_dotenv()
 
@@ -22,6 +23,7 @@ class ChatRequest(BaseModel):
 
 app = FastAPI()
 client = get_client(url="http://localhost:2024")
+executor = ThreadPoolExecutor(max_workers=2)
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
@@ -89,3 +91,81 @@ async def chat_tts():
     return {"status": "played"}
 
 
+recording_sessions = {}
+
+def to_wav_bytes(audio, samplerate):
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(samplerate)
+        wf.writeframes(audio.tobytes())
+    buffer.seek(0)
+    return buffer
+
+
+
+@app.post("/chat/transcribe")
+async def transcribe():
+    # init client
+    from openai import OpenAI
+    openai_client = OpenAI()
+
+    def generate_speech():
+        response = openai_client.audio.speech.create(
+            model="tts-1",
+            voice="alloy",
+            input=final_response,
+            response_format="wav"
+        )
+        return response.content
+
+    def play_on_server():
+        import sounddevice as sd
+        import numpy as np
+        import io, wave
+
+        with wave.open(io.BytesIO(audio_bytes)) as wf:
+            samplerate = wf.getframerate()
+            samples = np.frombuffer(wf.readframes(wf.getnframes()), dtype=np.int16)
+            samples = samples.astype(np.float32) / 2**15
+
+        sd.play(samples, samplerate)
+        sd.wait()
+
+    # one thread per user session for the langgraph app
+    thread = await client.threads.create()
+    thread_id = thread["thread_id"]
+
+    loop = asyncio.get_event_loop()
+
+    # 1. recording
+    samples, samplerate = await loop.run_in_executor(executor, record_until_silence)
+    wav_buffer = to_wav_bytes(samples, samplerate)
+
+    # 2. transcribe
+    transcript = openai_client.audio.transcriptions.create(
+        model="gpt-4o-mini-transcribe",
+        file=("audio.wav", wav_buffer, "audio/wav"),
+        response_format="text"
+    )
+
+    # 3. generate response
+    final_response = None
+    async for chunk in client.runs.stream(
+        thread_id,
+        "calculator",
+        input={"messages": [{"role": "human", "content": transcript}]},
+        stream_mode="values",
+    ):
+        if chunk.data and "messages" in chunk.data:
+            final_response = chunk.data["messages"][-1]
+
+    final_response = final_response["content"]
+
+    print(f"final response: {final_response}, {type(final_response)}")
+    audio_bytes = await loop.run_in_executor(executor, generate_speech)
+
+    # 4. play on server
+    await loop.run_in_executor(executor, play_on_server)
+    return {"status": "task completed", "content": transcript}
