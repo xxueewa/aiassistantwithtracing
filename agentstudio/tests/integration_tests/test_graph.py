@@ -1,6 +1,6 @@
 import pytest
 
-from agent import graph
+from evaluator import graph
 
 pytestmark = pytest.mark.anyio
 
