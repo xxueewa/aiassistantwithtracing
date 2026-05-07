@@ -7,12 +7,14 @@ from langgraph_sdk import get_client
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 import json
-
+from openai import OpenAI
 import numpy as np
 import sounddevice as sd
 import asyncio
 from dotenv import load_dotenv
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel
+from fastapi import WebSocket
+
 from src.services.sst_stream import record_until_silence
 
 load_dotenv()
@@ -22,7 +24,10 @@ class ChatRequest(BaseModel):
     thread_id: Optional[str] = None  # works on Python 3.8+
 
 app = FastAPI()
+# init client
 client = get_client(url="http://localhost:2024")
+openai_client = OpenAI()
+# init thread pool
 executor = ThreadPoolExecutor(max_workers=2)
 
 @app.post("/chat")
@@ -107,10 +112,6 @@ def to_wav_bytes(audio, samplerate):
 
 @app.post("/chat/transcribe")
 async def transcribe():
-    # init client
-    from openai import OpenAI
-    openai_client = OpenAI()
-
     def generate_speech():
         response = openai_client.audio.speech.create(
             model="tts-1",
@@ -154,7 +155,7 @@ async def transcribe():
     final_response = None
     async for chunk in client.runs.stream(
         thread_id,
-        "calculator",
+        "assistant",
         input={"messages": [{"role": "human", "content": transcript}]},
         stream_mode="values",
     ):
