@@ -11,6 +11,7 @@ Built an intelligent assistant that utilized LLM Mixture-of-Experts for sharp re
 Leveraged LangSmith for comprehensive tracing, monitoring, and observability across the full agent lifecycle.
 
 ### Features
+- Audio Interaction
 - Intention Detection
 - Functional Calling 
 - Short-Term Memory
@@ -18,4 +19,7 @@ Leveraged LangSmith for comprehensive tracing, monitoring, and observability acr
 - SSE Endpoint
 - Distributed Tracing 
 - Feedback Loop (In progress)
+
+## Diagram
+<img width="1800" height="1500" alt="High-Level-Design (langchain   langGraph project))" src="https://github.com/user-attachments/assets/b6ea9b30-b909-4990-941d-326112edc7bd" />
 
