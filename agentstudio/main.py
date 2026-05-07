@@ -133,6 +133,7 @@ async def transcribe():
 
         sd.play(samples, samplerate)
         sd.wait()
+        print("played sound")
 
     # one thread per user session for the langgraph app
     thread = await client.threads.create()
