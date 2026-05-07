@@ -3,7 +3,8 @@
   "dependencies": ["."],
   "graphs": {
     "calculator": "./src/calculator/graph.py:graph",
-    "calendar": "./src/calendar/graph.py:graph"
+    "calendar": "./src/calendar/graph.py:graph",
+    "assistant": "./src/assistant/assistant.py:graph"
   },
   "env": ".env",
   "image_distro": "wolfi"
