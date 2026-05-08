@@ -14,6 +14,7 @@ import asyncio
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from fastapi import WebSocket
+from starlette.websockets import WebSocketDisconnect
 
 from src.services.sst_stream import record_until_silence
 
@@ -23,6 +24,8 @@ class ChatRequest(BaseModel):
     message: str
     thread_id: Optional[str] = None  # works on Python 3.8+
 
+class AudioRequest(BaseModel):
+    thread_id: Optional[str] = None
 app = FastAPI()
 # init client
 client = get_client(url="http://localhost:2024")
@@ -111,7 +114,7 @@ def to_wav_bytes(audio, samplerate):
 
 
 @app.post("/chat/transcribe")
-async def transcribe():
+async def transcribe(req: AudioRequest):
     def generate_speech():
         response = openai_client.audio.speech.create(
             model="tts-1",
@@ -136,8 +139,12 @@ async def transcribe():
         print("played sound")
 
     # one thread per user session for the langgraph app
-    thread = await client.threads.create()
-    thread_id = thread["thread_id"]
+    if req.thread_id:
+        thread_id = req.thread_id
+        thread = await client.threads.create(thread_id=thread_id, if_exists="do_nothing")
+    else:
+        thread = await client.threads.create()
+        thread_id = thread["thread_id"]
 
     loop = asyncio.get_event_loop()
 
