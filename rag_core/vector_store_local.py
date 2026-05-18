@@ -3,21 +3,23 @@ Vector store utilities for local development.
 """
 from uuid import uuid4
 
+from dotenv import load_dotenv
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 import logging
 import os
+from pydantic.types import SecretStr
 
+load_dotenv()
 logger = logging.getLogger(__name__)
-openai_api_key = os.environ.get("OPENAI_API_KEY")
-embedding_model = os.environ.get("EMBEDDING_MODEL")
-chat_model = os.environ.get("CHAT_MODEL")
+embedding_model = os.environ.get("EMBEDDING_MODEL", "text-embedding-3-small")
+chat_model = os.environ.get("CHAT_MODEL", "gpt-4o-mini")
 
 # ── Embedding helper ──────────────────────────────────────────────────────────
 
 def get_embeddings() -> OpenAIEmbeddings:
-    return OpenAIEmbeddings(model=embedding_model, api_key=openai_api_key)
+    return OpenAIEmbeddings(model=embedding_model)
 
 # ── Create Vector Store ──────────────────────────────────────────────────────────
 

@@ -1,3 +1,4 @@
 .env
 *.egg-info
 */__pycache__
+ rag_service/routes/__pycache__/
