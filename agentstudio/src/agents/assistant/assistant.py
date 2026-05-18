@@ -1,41 +1,25 @@
 from __future__ import annotations
-
 from typing import Any, Dict
-from langchain.tools import tool
 from langchain_core.messages import SystemMessage, ToolMessage, AnyMessage
 from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI, tools
+from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.prebuilt import ToolNode
 from langmem.short_term import SummarizationNode, RunningSummary
 from pydantic import SecretStr
 from typing_extensions import TypedDict, Literal
-from tavily import TavilyClient
+from tools.rag_tool import info_retrieval
+from tools.search_tool import search
 import os
 
+
 openai_api_key = SecretStr(os.environ["OPENAI_API_KEY"])
-tavily_api_key = str(os.environ["TAVILY_API_KEY"])
 
 llm = ChatOpenAI(model="gpt-5.4", temperature=0, api_key=openai_api_key)
 llm_with_summary = llm.bind(max_tokens=128)
 
-tavily_client = TavilyClient(api_key=tavily_api_key)
-
-@tool
-def search_tool(query: str) -> str:
-    """
-    use Tavily package to search for information on the web
-    TODO: develop customized search tool
-    """
-    response = tavily_client.search(
-        query=query,
-        include_answer="basic"
-    )
-    print("Response : " + response["answer"])
-    return response["answer"]
-
-tools = [search_tool]
+tools = [search, info_retrieval]
 tool_node = ToolNode(tools=tools)
 model_with_tools = llm.bind_tools(tools)
 
