@@ -2,5 +2,6 @@
 *.egg-info
 */__pycache__
 rag_service/routes/__pycache__/
-*/chroma_db/*
+chroma_db/
 .idea/
+*.iml

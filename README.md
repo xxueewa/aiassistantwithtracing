@@ -25,7 +25,8 @@ Leveraged LangSmith for comprehensive tracing, monitoring, and observability acr
 - Feedback Loop (In progress)
 
 ## Development
-- run rag_service:  uv run uvicorn main:app --reload
+- run services: in each module, execute `uv run uvicorn main:app --reload`
+- run langgraph agent: `langgraph dev`
 
 
 ## Diagram
