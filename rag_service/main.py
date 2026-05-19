@@ -1,6 +1,6 @@
 from fastapi import FastAPI
-from .routes import ingest
-from .routes import query
+from routes import ingest
+from routes import query
 import logging
 
 logging.basicConfig(level=logging.INFO)

@@ -1,5 +1,0 @@
-[tool.uv.workspace]
-members = ["rag_core", "rag_service", "agentstudio", "sts_client"]
-
-[tool.uv.sources]
-rag-core = { workspace = true }

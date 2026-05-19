@@ -14,10 +14,10 @@ Response body:
 """
 
 import logging
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-from rag_core.rag_chain import run_rag_chain
+from ragcorelib.rag_chain import run_rag_chain
 
 
 class QueryRequest(BaseModel):
@@ -38,14 +38,16 @@ def handler(event: QueryRequest) -> dict:
         question = event.question.strip()
 
         if not question:
-            return _resp(400, {"error": "Missing 'question' in request body."})
+            raise HTTPException(status_code=400, detail="Bad Request. Missing question in the request body.")
 
         result = run_rag_chain(question)
         return _resp(200, result)
 
+    except HTTPException:
+        raise
     except Exception as exc:
-        logger.exception("Unhandled error in query handler: %s", exc)
-        return _resp(500, {"error": "Internal server error."})
+        logger.exception("Internal Server Error. Unhandled error in query handler: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 def _resp(status: int, body: dict) -> dict:

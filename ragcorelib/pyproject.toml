@@ -1,8 +1,9 @@
 [project]
-name = "rag-core"
+name = "ragcorelib"
 version = "0.1.0"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
+    "langchain>=1.3.1",
     "langchain-core>=0.3.0",
     "langchain-openai>=0.3.0",
     "langchain-chroma>=0.2.0",
@@ -14,4 +15,5 @@ requires = ["setuptools>=73.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = [".."]
+include = ["ragcorelib*"]

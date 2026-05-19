@@ -19,7 +19,7 @@ import logging
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel
 from langsmith import traceable
-from rag_core.vector_store_local import upsert_documents, create_vector_store
+from ragcorelib.vector_store_local import upsert_documents, create_vector_store
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

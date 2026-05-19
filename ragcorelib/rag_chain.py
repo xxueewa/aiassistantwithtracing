@@ -19,7 +19,7 @@ from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from langchain_openai import ChatOpenAI
 from langsmith import traceable
 
-from rag_core.vector_store_local import create_vector_store
+from ragcorelib.vector_store_local import create_vector_store
 
 logger = logging.getLogger(__name__)
 

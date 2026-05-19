@@ -8,7 +8,6 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 import json
 
-from langsmith import traceable
 from openai import OpenAI
 import numpy as np
 import sounddevice as sd
@@ -17,7 +16,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from langsmith.middleware import TracingMiddleware
 
-from sst_stream import record_until_silence
+from .sst_stream import record_until_silence
 
 load_dotenv()
 
