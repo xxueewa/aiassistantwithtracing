@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from langsmith.middleware import TracingMiddleware
 
-from .sst_stream import record_until_silence
+from sst_stream import record_until_silence
 
 load_dotenv()
 
