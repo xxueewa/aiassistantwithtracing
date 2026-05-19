@@ -27,7 +27,7 @@ class ChatRequest(BaseModel):
 app = FastAPI()
 app.add_middleware(TracingMiddleware)
 # init client
-client = get_client(url="http://localhost:2024")
+client = get_client(url=os.getenv("LANGGRAPH_URL", "http://localhost:2024"))
 openai_client = OpenAI()
 # init thread pool
 executor = ThreadPoolExecutor(max_workers=2)
