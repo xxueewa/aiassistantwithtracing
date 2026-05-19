@@ -24,6 +24,11 @@ Leveraged LangSmith for comprehensive tracing, monitoring, and observability acr
 - Distributed Tracing 
 - Feedback Loop (In progress)
 
+## Development
+- run services: in each module, execute `uv run uvicorn main:app --reload`
+- run langgraph agent: `langgraph dev`
+
+
 ## Diagram
 <img width="1800" height="1500" alt="High-Level-Design (langchain   langGraph project))" src="https://github.com/user-attachments/assets/b6ea9b30-b909-4990-941d-326112edc7bd" />
 

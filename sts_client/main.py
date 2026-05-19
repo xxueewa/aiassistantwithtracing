@@ -7,16 +7,16 @@ from langgraph_sdk import get_client
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 import json
+
 from openai import OpenAI
 import numpy as np
 import sounddevice as sd
 import asyncio
 from dotenv import load_dotenv
 from pydantic import BaseModel
-from fastapi import WebSocket
-from starlette.websockets import WebSocketDisconnect
+from langsmith.middleware import TracingMiddleware
 
-from src.services.sst_stream import record_until_silence
+from sst_stream import record_until_silence
 
 load_dotenv()
 
@@ -24,9 +24,8 @@ class ChatRequest(BaseModel):
     message: str
     thread_id: Optional[str] = None  # works on Python 3.8+
 
-class AudioRequest(BaseModel):
-    thread_id: Optional[str] = None
 app = FastAPI()
+app.add_middleware(TracingMiddleware)
 # init client
 client = get_client(url="http://localhost:2024")
 openai_client = OpenAI()
@@ -46,7 +45,7 @@ async def chat(req: ChatRequest):
 
     async for chunk in client.runs.stream(
         thread_id,
-        "calculator",
+        "assistant",
         input={"messages": [{"role": "human", "content": req.message}]},
         stream_mode="values",
     ):
@@ -114,7 +113,7 @@ def to_wav_bytes(audio, samplerate):
 
 
 @app.post("/chat/transcribe")
-async def transcribe(req: AudioRequest):
+async def transcribe():
     def generate_speech():
         response = openai_client.audio.speech.create(
             model="tts-1",
@@ -139,12 +138,8 @@ async def transcribe(req: AudioRequest):
         print("played sound")
 
     # one thread per user session for the langgraph app
-    if req.thread_id:
-        thread_id = req.thread_id
-        thread = await client.threads.create(thread_id=thread_id, if_exists="do_nothing")
-    else:
-        thread = await client.threads.create()
-        thread_id = thread["thread_id"]
+    thread = await client.threads.create()
+    thread_id = thread["thread_id"]
 
     loop = asyncio.get_event_loop()
 
