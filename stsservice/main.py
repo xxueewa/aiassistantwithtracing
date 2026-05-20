@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from langgraph_sdk import get_client
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 import json
 
@@ -174,3 +174,20 @@ async def transcribe():
     # 4. play on server
     await loop.run_in_executor(executor, play_on_server)
     return {"status": "task completed", "content": transcript}
+
+@app.websocket("/chat/ws/text")
+async def transcribe_websocket(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            text  = await websocket.receive_text()
+            await asyncio.sleep(10) # simulate the agent processing
+            await websocket.send_text(f"Completed processing of {text}")
+    except Exception as e:
+        print(e)
+
+
+
+
+
+
