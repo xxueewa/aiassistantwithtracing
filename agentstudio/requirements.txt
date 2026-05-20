@@ -261,3 +261,4 @@ zipp==3.23.0 ; python_full_version >= '3.11'
     # via importlib-metadata
 zstandard==0.25.0
     # via langsmith
+langmem==0.0.30
