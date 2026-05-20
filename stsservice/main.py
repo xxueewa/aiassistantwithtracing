@@ -1,6 +1,7 @@
 import io
 import os
 import wave
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
@@ -139,7 +140,7 @@ async def transcribe():
         print("played sound")
 
     # one thread per user session for the langgraph app
-    thread = await client.threads.create()
+    thread = await client.threads.create(if_exists="do_nothing")
     thread_id = thread["thread_id"]
 
     loop = asyncio.get_event_loop()
@@ -186,6 +187,76 @@ async def transcribe_websocket(websocket: WebSocket):
     except Exception as e:
         print(e)
 
+def generate_dummy_audio():
+    file_path = "assets/speech_detection.wav"
+    # 1. Open the file in Read Binary mode
+    with open(file_path, "rb") as file:
+        # 2. Read the content into a bytes object
+        wav_bytes = file.read()
+    return wav_bytes
+
+@app.websocket("/chat/ws/audio")
+async def transcribe_websocket(websocket: WebSocket):
+    def generate_audio(text: str):
+        response = openai_client.audio.speech.create(
+            model="tts-1",
+            voice="alloy",
+            input=text,
+            response_format="wav"
+        )
+        return response.content
+
+    await websocket.accept()
+    thread = await client.threads.create(if_exists="do_nothing")
+    thread_id = thread["thread_id"]
+    print(f"--> WebSocket connected on Thread ID: {thread_id}")
+
+    try:
+        while True:
+            # 1. receive audio bytes from mobile app
+            audio_chunk  = await websocket.receive_bytes()
+
+            dummy_audio_chunk = generate_dummy_audio()
+
+            # 2. transcribe
+            transcript = openai_client.audio.transcriptions.create(
+                model="gpt-4o-mini-transcribe",
+                file=("audio.wav", dummy_audio_chunk, "audio/wav"),
+                response_format="text"
+            )
+
+            print(f"The dummy audio input is: {transcript}")
+
+            # 3. invoke agent to process the task
+            final_response = None
+            async for chunk in client.runs.stream(
+                    thread_id,
+                    "assistant",
+                    input={"messages": [{"role": "human", "content": transcript}]},
+                    stream_mode="values",
+            ):
+                if chunk.data and "messages" in chunk.data:
+                    final_response = chunk.data["messages"][-1]
+
+            content = final_response["content"]
+            print(type(content))
+            if isinstance(content, list):
+                tts_input = " ".join(
+                    block["text"] for block in content if block.get("type") == "text"
+                )
+            else:
+                tts_input = content
+            print(tts_input)
+
+            # 4. tts
+            loop = asyncio.get_event_loop()
+            audio_bytes = await loop.run_in_executor(executor, lambda: generate_audio(tts_input))
+
+            await websocket.send_bytes(audio_bytes)
+    except WebSocketDisconnect:
+        print("disconnected")
+    except Exception as e:
+        print(f"Error handling audio stream: {e}")
 
 
 
