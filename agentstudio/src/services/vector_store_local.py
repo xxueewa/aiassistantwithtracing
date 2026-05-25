@@ -3,27 +3,43 @@ Vector store utilities for local development.
 """
 from uuid import uuid4
 
+from dotenv import load_dotenv
 from langchain_chroma import Chroma
-import logging
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
-from src.config.config import create_config
+import logging
+import os
+from functools import cache
+from pydantic.types import SecretStr
 
+load_dotenv()
 logger = logging.getLogger(__name__)
-config_instance = create_config()
+embedding_model = os.environ.get("EMBEDDING_MODEL", "text-embedding-3-small")
+chat_model = os.environ.get("CHAT_MODEL", "gpt-4o-mini")
+
+_CHROMA_DB_PATH = os.environ.get(
+    "CHROMA_DB_PATH",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "chroma_db"),
+)
 
 # ── Embedding helper ──────────────────────────────────────────────────────────
 
-def get_embeddings(model: str) -> OpenAIEmbeddings:
-    print(f"Using apikey: {config_instance.openai_api_key}")
-    return OpenAIEmbeddings(model=model, api_key=config_instance.openai_api_key)
+def get_embeddings() -> OpenAIEmbeddings:
+    return OpenAIEmbeddings(model=embedding_model)
 
 # ── Create Vector Store ──────────────────────────────────────────────────────────
 
-def create_vector_store(embedding_model: str) -> Chroma:
-    return Chroma(collection_name="example_collection",
-                  embedding_function=get_embeddings(embedding_model),
-                  persist_directory="./chroma_db")
+@cache
+def create_vector_store() -> Chroma:
+    return Chroma(
+        collection_name="rag_collection",
+        embedding_function=get_embeddings(),
+        persist_directory=_CHROMA_DB_PATH,
+    )
+
+
+def reset_vector_store() -> None:
+    create_vector_store.cache_clear()
 
 # ── Document ingestion ────────────────────────────────────────────────────────
 
@@ -46,9 +62,9 @@ def delete_documents(vs: Chroma, uuid: str):
 
 def query_by_vector(vs: Chroma, text: str) -> list[Document] :
     results = vs.similarity_search_by_vector(
-        embedding=get_embeddings("text-embedding-3-small").embed_query(text),
+        embedding=get_embeddings().embed_query(text),
     )
-    return results["documents"]
+    return results
 
 
 def similarity_search(vs: Chroma, text: str, k: int = 4) -> list[Document]:
