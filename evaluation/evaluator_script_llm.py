@@ -1,5 +1,6 @@
 import csv
 import os
+import pytest
 
 from dotenv import load_dotenv
 
@@ -9,30 +10,9 @@ from langsmith import Client
 from openevals.llm import create_llm_as_judge
 from langgraph_sdk import get_sync_client
 from langgraph_sdk.client import SyncRunsClient
+from openevals.prompts import TOOL_SELECTION_PROMPT, CORRECTNESS_PROMPT
 
-TOOL_SELECTION_PROMPT = '''
-You are an expert data labeler. Your task is to grade the accuracy of an AI agent's tool selection during the resolution of a user query.
-
-<Rubric>
-Accurate tool selection:
-- Uses the most appropriate tool for each step given the context
-- Avoids unnecessary or redundant tool calls
-- Uses tools in a logical order where dependencies exist
-- Is semantically equivalent to the provided reference tool sequence, if present
-</Rubric>
-
-<Instructions>
-1. Grade the following thread, evaluating whether the agent selected the right tools in the right order to resolve the user's query efficiently.
-2. Evaluate both the choice of tools and whether any tools were unnecessary, missing, or could have been replaced with a more appropriate alternative
-</Instructions>
-
-Please grade the following trajectory according to the above instructions:
-
-<trajectory>
-{{outputs}}
-</trajectory>
-'''
-
+# https://github.com/langchain-ai/openevals/tree/main
 CSV_PATH = "tool_selection_test_set.csv"
 agent_client = get_sync_client(url=os.getenv("LANGGRAPH_URL", "http://localhost:2024"))
 runs_client: SyncRunsClient = agent_client.runs
@@ -41,7 +21,7 @@ runs_client: SyncRunsClient = agent_client.runs
 tool_selection_evaluator = create_llm_as_judge(
     prompt=TOOL_SELECTION_PROMPT,
     model="openai:o3-mini",
-    feedback_key="tool_selection",
+    feedback_key="tool_selection_llm",
 )
 
 
@@ -67,11 +47,11 @@ def target(inputs: dict) -> dict:
     }
 
 
-
+@pytest.mark.langsmith
 def correctness_evaluator(inputs: dict, outputs: dict, reference_outputs: dict):
     return tool_selection_evaluator(
         inputs=inputs,
-        outputs={"output": outputs["messages"]},
+        outputs=outputs["messages"],
         reference_outputs=reference_outputs,
     )
 

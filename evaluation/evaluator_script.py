@@ -54,7 +54,6 @@ def target(inputs: dict) -> dict:
     )
     runs_client.join(thread["thread_id"], run["run_id"])
     thread_state = agent_client.threads.get_state(thread["thread_id"])
-    print(thread_state)
     messages = thread_state["values"]["messages"]
 
     tool_call_names = [
