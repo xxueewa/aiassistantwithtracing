@@ -54,7 +54,6 @@ def target(inputs: dict) -> dict:
     )
     runs_client.join(thread["thread_id"], run["run_id"])
     thread_state = agent_client.threads.get_state(thread["thread_id"])
-    print(thread_state)
     messages = thread_state["values"]["messages"]
 
     tool_call_names = [
@@ -62,14 +61,20 @@ def target(inputs: dict) -> dict:
         for message in messages
         for tool_call in (message.get("tool_calls") or [])
     ]
-    return {"output": tool_call_names[0] if tool_call_names else ""}
-
-
-def exact_match_evaluator(outputs: dict, reference_outputs: dict) -> dict:
     return {
-        "key": "exact_tool_match",
-        "score": int(outputs["output"] == reference_outputs["output"]),
+        "output": tool_call_names[0] if tool_call_names else None,
+        "messages": messages,
     }
+
+
+
+def correctness_evaluator(inputs: dict, outputs: dict, reference_outputs: dict):
+    return tool_selection_evaluator(
+        inputs=inputs,
+        outputs={"output": outputs["messages"]},
+        reference_outputs=reference_outputs,
+    )
+
 
 if __name__ == "__main__":
     ls_client = Client(api_key=os.getenv("LANGSMITH_API_KEY"))
@@ -99,7 +104,7 @@ if __name__ == "__main__":
     experiment_results = ls_client.evaluate(
         target,
         data="assistant_tool_selection",
-        evaluators=[exact_match_evaluator],
+        evaluators=[correctness_evaluator],
         experiment_prefix="assistant_experiment_tool_selection",
         max_concurrency=2,
     )
