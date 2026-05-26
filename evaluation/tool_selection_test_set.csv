@@ -1,0 +1,51 @@
+input,output
+"What is the latest news about OpenAI?",search
+"Who won the 2024 US presidential election?",search
+"What are the current interest rates set by the Federal Reserve?",search
+"What is the weather like in New York today?",search
+"What are the top trending topics on social media right now?",search
+"Who is the current CEO of Tesla?",search
+"What new AI models were released this month?",search
+"What is the stock price of Apple right now?",search
+"What happened at the G7 summit last week?",search
+"What are the latest updates on the Ukraine conflict?",search
+"Are there any recent breakthroughs in quantum computing?",search
+"What movies are currently playing in theaters?",search
+"What is the current inflation rate in the US?",search
+"Who won the Champions League final this year?",search
+"What is the most recent version of Python?",search
+"According to our internal documentation, what is the refund policy?",info_retrieval
+"Based on the company handbook, how many vacation days do employees get?",info_retrieval
+"What does our product specification say about the API rate limits?",info_retrieval
+"Summarize the key points from the Q3 2024 earnings report in the knowledge base.",info_retrieval
+"What are the onboarding steps described in our internal wiki?",info_retrieval
+"What is the recommended architecture for our microservices according to the design docs?",info_retrieval
+"What does the SLA document say about uptime guarantees?",info_retrieval
+"How does our authentication flow work based on the technical documentation?",info_retrieval
+"What are the known bugs listed in the issue tracker document?",info_retrieval
+"What are the pricing tiers described in the internal pricing guide?",info_retrieval
+"Can you retrieve the deployment checklist from the DevOps runbook?",info_retrieval
+"What does the legal terms document say about data retention?",info_retrieval
+"Based on our internal training materials, what are the sales objection handling techniques?",info_retrieval
+"What does the product roadmap document say about Q2 features?",info_retrieval
+"What are the database schema details mentioned in the backend technical spec?",info_retrieval
+"What are the best practices for REST API design?",search
+"Who invented the transformer architecture?",search
+"What is the difference between RAG and fine-tuning?",search
+"What open source LLM frameworks are popular right now?",search
+"What are recent papers on AI agents published on arXiv?",search
+"Explain the latest updates to LangChain from the official release notes.",search
+"What is the current market share of cloud providers like AWS, Azure, and GCP?",search
+"What programming languages are trending in 2025?",search
+"What are the most downloaded npm packages this week?",search
+"What does the official PostgreSQL documentation say about indexing strategies?",search
+"What does our internal glossary define as a 'core user'?",info_retrieval
+"According to the support playbook, how should we handle an outage escalation?",info_retrieval
+"What metrics are tracked in our internal OKR document for this quarter?",info_retrieval
+"What third-party integrations are listed as supported in our product documentation?",info_retrieval
+"Based on the compliance documentation, what are our GDPR obligations?",info_retrieval
+"What is described as the system prompt template in our agent configuration doc?",info_retrieval
+"What does the internal security policy say about password rotation?",info_retrieval
+"According to the release notes in our knowledge base, what changed in version 2.3?",info_retrieval
+"What are the test coverage requirements stated in our engineering guidelines?",info_retrieval
+"What does our internal customer segmentation document say about enterprise clients?",info_retrieval
