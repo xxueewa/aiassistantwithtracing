@@ -1,4 +1,4 @@
-## AI Assistant Application
+## BizTrip Assistant Application
 
 <img width="800" height="450" alt="biztrip-product-showcase" src="https://github.com/user-attachments/assets/dffb029f-d8a4-4d97-8910-450d65ce7a01" />
 <br>
