@@ -148,6 +148,7 @@ async def transcribe():
     # 1. recording
     samples, samplerate = await loop.run_in_executor(executor, record_until_silence)
     wav_buffer = to_wav_bytes(samples, samplerate)
+    logger.info(f"samplerate: {samplerate}")
 
     # 2. transcribe
     transcript = openai_client.audio.transcriptions.create(
@@ -195,6 +196,20 @@ def generate_dummy_audio():
         wav_bytes = file.read()
     return wav_bytes
 
+def pcm16_to_wav(
+    pcm_bytes: bytes,
+    sample_rate: int = 48_000,
+) -> bytes:
+    output = io.BytesIO()
+
+    with wave.open(output, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)  # PCM16 = 2 bytes
+        wav.setframerate(sample_rate)
+        wav.writeframes(pcm_bytes)
+
+    return output.getvalue()
+
 @app.websocket("/chat/ws/audio/{mode}")
 async def transcribe_websocket(websocket: WebSocket, mode: str):
     def generate_audio(text: str):
@@ -215,19 +230,34 @@ async def transcribe_websocket(websocket: WebSocket, mode: str):
         while True:
             # 1. receive audio bytes from mobile app
             audio_chunk  = await websocket.receive_bytes()
+            wav_audio = pcm16_to_wav(
+                audio_chunk,
+                sample_rate=48_000,  # Must match the iOS microphone rate
+            )
+            logger.info(f"--> WebSocket received audio chunk type: {type(wav_audio)}")
+
+            # debug only
             if mode == 'debug':
                 logger.info(f"--> Entering local debug mode: {mode}")
                 audio_chunk = generate_dummy_audio()
 
             # 2. transcribe
-            transcript = openai_client.audio.transcriptions.create(
-                model="gpt-4o-mini-transcribe",
-                file=("audio.wav", audio_chunk, "audio/wav"),
-                response_format="text"
-            )
+            try:
+                transcript = openai_client.audio.transcriptions.create(
+                    model="gpt-4o-mini-transcribe",
+                    file=("audio.wav", wav_audio, "audio/wav"),
+                    response_format="text"
+                )
+            except Exception as e:
+                logger.error(f"--> transcript model error: {e}")
 
-            if mode == 'debug':
-                logger.info(f"--> The audio input is: {transcript}")
+            logger.info(f"--> speech to text input: {transcript}")
+            #
+            # if mode == 'debug':
+            #     logger.info(f"--> The audio input is: {transcript}")
+
+            transcript = ("can you help check my next meeting agenda and retrieve the attendee's profile, "
+                          "prepare a meeting note. thanks")
 
             # 3. invoke agent to process the task
             final_response = None
@@ -251,11 +281,12 @@ async def transcribe_websocket(websocket: WebSocket, mode: str):
                 logger.info(f"--> The agent response is: {tts_input}")
 
             # 4. tts
-            loop = asyncio.get_event_loop()
-            audio_bytes = await loop.run_in_executor(executor, lambda: generate_audio(tts_input))
+            # loop = asyncio.get_event_loop()
+            # audio_bytes = await loop.run_in_executor(executor, lambda: generate_audio(tts_input))
 
             logger.info(f"--> Completed task processing: {thread_id}")
-            await websocket.send_bytes(audio_bytes)
+            # await websocket.send_bytes(audio_bytes)
+            await websocket.send_text(f"{content}")
     except WebSocketDisconnect:
         print("disconnected")
     except Exception as e:
