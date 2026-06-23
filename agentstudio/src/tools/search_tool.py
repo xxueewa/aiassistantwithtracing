@@ -9,7 +9,6 @@ tavily_client = TavilyClient(api_key=tavily_api_key)
 def search(query: str) -> str:
     """
     use Tavily package to search for information on the web
-    TODO: develop customized search tool
     """
     response = tavily_client.search(
         query=query,

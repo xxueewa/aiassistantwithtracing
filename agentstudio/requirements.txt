@@ -269,3 +269,4 @@ langchain-openai==1.2.1
 langchain-text-splitters==1.1.2
 chromadb==1.5.9
 tavily-python==0.7.24
+langchain-text-splitters==1.1.2

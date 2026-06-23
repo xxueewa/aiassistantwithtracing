@@ -12,6 +12,7 @@ dependencies = [
     "langsmith>=0.1.0",
     "numpy>=1.26.0",
     "sounddevice>=0.4.0",
+    "websockets>=16.0",
 ]
 
 [build-system]
