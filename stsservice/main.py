@@ -311,6 +311,8 @@ async def transcribe_websocket_server(websocket: WebSocket):
     await websocket.accept()
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
+    thread = await client.threads.create(if_exists="do_nothing")
+    thread_id = thread["thread_id"]
 
     quiet_frames_to_end = int(END_OF_UTTERANCE_SECONDS * DEVICE_SAMPLE_RATE)
     pre_roll_frames = max(1, int(PRE_ROLL_SECONDS * DEVICE_SAMPLE_RATE / AUDIO_BLOCK_SIZE))
@@ -400,7 +402,20 @@ async def transcribe_websocket_server(websocket: WebSocket):
                 sentences.append(pending_text)
                 pending_text = ""
             for sentence in sentences:
-                await websocket.send_text(f"Done processing {sentence}")
+
+                final_response = None
+                async for chunk in client.runs.stream(
+                        thread_id,
+                        "assistant",
+                        input={"messages": [{"role": "human", "content": sentence}]},
+                        stream_mode="values",
+                ):
+                    if chunk.data and "messages" in chunk.data:
+                        final_response = chunk.data["messages"][-1]
+
+                final_response = final_response["content"]
+
+                await websocket.send_text(final_response)
 
         while True:
             try:
