@@ -1,9 +1,11 @@
 import io
 import os
+import re
 import wave
 import base64
 import threading
 import logging
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 from langgraph_sdk import get_client
@@ -105,6 +107,7 @@ async def chat_tts():
 recording_sessions = {}
 
 def to_wav_bytes(audio, samplerate):
+    audio = np.asarray(audio, dtype=np.int16).reshape(-1)
     buffer = io.BytesIO()
     with wave.open(buffer, 'wb') as wf:
         wf.setnchannels(1)
@@ -219,111 +222,269 @@ def normalize(utterance: np.ndarray) -> np.ndarray:
     normalized = float_audio / max_val * 0.9     # scale to 90% of max int16
     return normalized.astype(np.int16)
 
-SAMPLE_RATE    = 16000
-CHANNELS       = 1
-CHUNK          = 1024
-DTYPE          = np.int16
+DEVICE_SAMPLE_RATE = 48_000
+TRANSCRIBE_SAMPLE_RATE = 16_000
+CHANNELS = 1
+AUDIO_BLOCK_SIZE = 960  # 20 ms at 48 kHz; short blocks make VAD responsive.
+DTYPE = np.int16
 
-SILENCE_THRESHOLD = 0.01   # RMS amplitude (0.0–1.0 normalized)
-SILENCE_FRAMES    = 20     # consecutive silent chunks before flush
-                           # 20 * (1024/16000) ≈ 1.28 seconds of silence
+END_OF_UTTERANCE_SECONDS = 0.85
+PRE_ROLL_SECONDS = 0.24
+TRAILING_PAD_SECONDS = 0.16
+MIN_SPEECH_SECONDS = 0.45
+MAX_UTTERANCE_SECONDS = 12.0
 
-PRE_ROLL_FRAMES = 3        # chunks to keep before speech starts
-                           # avoids clipping the first syllable
-MIN_DURATION_SECONDS = 0.5
+NOISE_FLOOR_ALPHA = 0.03
+SPEECH_RMS_MIN = 0.012
+SPEECH_RMS_MARGIN = 3.0
+TRIM_RMS_MIN = 0.006
+
+SENTENCE_IDLE_FLUSH_SECONDS = 1.2
+MAX_PENDING_SENTENCE_CHARS = 180
+SENTENCE_END_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def pcm16_rms(audio: np.ndarray) -> float:
+    samples = np.asarray(audio, dtype=np.int16).reshape(-1).astype(np.float32)
+    if samples.size == 0:
+        return 0.0
+    normalized = samples / np.iinfo(np.int16).max
+    return float(np.sqrt(np.mean(normalized * normalized)))
+
+
+def resample_pcm16(audio: np.ndarray, source_rate: int, target_rate: int) -> np.ndarray:
+    samples = np.asarray(audio, dtype=np.int16).reshape(-1)
+    if source_rate == target_rate or samples.size == 0:
+        return samples
+
+    duration = samples.size / source_rate
+    target_size = max(1, int(round(duration * target_rate)))
+    source_times = np.arange(samples.size, dtype=np.float64) / source_rate
+    target_times = np.arange(target_size, dtype=np.float64) / target_rate
+    resampled = np.interp(
+        target_times,
+        source_times,
+        samples.astype(np.float32),
+    )
+    return np.clip(resampled, -32768, 32767).astype(np.int16)
+
+
+def trim_quiet_edges(audio: np.ndarray, sample_rate: int) -> np.ndarray:
+    samples = np.asarray(audio, dtype=np.int16).reshape(-1)
+    frame_size = max(1, int(sample_rate * 0.02))
+    frame_count = samples.size // frame_size
+    if frame_count == 0:
+        return samples
+
+    frames = samples[:frame_count * frame_size].reshape(frame_count, frame_size)
+    rms_values = np.array([pcm16_rms(frame) for frame in frames])
+    threshold = max(TRIM_RMS_MIN, float(rms_values.max(initial=0.0)) * 0.08)
+    voiced = np.flatnonzero(rms_values > threshold)
+    if voiced.size == 0:
+        return np.array([], dtype=np.int16)
+
+    pad = int(TRAILING_PAD_SECONDS * sample_rate)
+    start = max(0, int(voiced[0]) * frame_size - pad)
+    end = min(samples.size, (int(voiced[-1]) + 1) * frame_size + pad)
+    return samples[start:end]
+
+
+def split_complete_sentences(buffer: str) -> tuple[list[str], str]:
+    text = " ".join(buffer.split())
+    if not text:
+        return [], ""
+
+    parts = SENTENCE_END_RE.split(text)
+    if len(parts) == 1:
+        if len(text) >= MAX_PENDING_SENTENCE_CHARS:
+            return [text], ""
+        return [], text
+
+    if re.search(r"[.!?]$", text):
+        return [part.strip() for part in parts if part.strip()], ""
+
+    complete = [part.strip() for part in parts[:-1] if part.strip()]
+    return complete, parts[-1].strip()
 
 @app.websocket("/ws/audio")
 async def transcribe_websocket_server(websocket: WebSocket):
     await websocket.accept()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
 
-    # ── VAD state (mutated across callback calls) ─────────────────
+    quiet_frames_to_end = int(END_OF_UTTERANCE_SECONDS * DEVICE_SAMPLE_RATE)
+    pre_roll_frames = max(1, int(PRE_ROLL_SECONDS * DEVICE_SAMPLE_RATE / AUDIO_BLOCK_SIZE))
+    max_utterance_frames = int(MAX_UTTERANCE_SECONDS * DEVICE_SAMPLE_RATE)
+
+    # VAD state is owned by the PortAudio callback thread. Keep it tiny and only
+    # hand completed utterances to the asyncio loop with call_soon_threadsafe().
     state = {
-        "is_speaking":    False,
-        "silence_count":  0,
-        "speech_buffer":  [],       # accumulates chunks during speech
-        "pre_roll":       [],       # small ring buffer of recent silent chunks
+        "is_speaking": False,
+        "quiet_frames": 0,
+        "total_frames": 0,
+        "voiced_frames": 0,
+        "noise_floor": 0.003,
+        "speech_buffer": [],
+        "pre_roll": deque(maxlen=pre_roll_frames),
     }
 
-    # ── Audio thread → queue bridge ──────────────────────────────
     def sd_callback(indata, frames, time, status):
-        chunk = indata.copy()
+        if status:
+            logger.warning("--> SoundDevice input status: %s", status)
 
-        # Normalize int16 → float32 for RMS calculation
-        rms = np.sqrt(np.mean((chunk.astype(np.float32) / 2 ** 15) ** 2))
-        if rms > SILENCE_THRESHOLD:
-            # ── Speech detected ───────────────────────────────────
+        chunk = indata.copy().reshape(-1)
+        rms = pcm16_rms(chunk)
+        speech_threshold = max(
+            SPEECH_RMS_MIN,
+            state["noise_floor"] * SPEECH_RMS_MARGIN,
+        )
+        is_voice = rms > speech_threshold
+
+        if not state["is_speaking"] and not is_voice:
+            # Track room tone while idle. This adaptive floor handles different
+            # microphones better than one fixed silence threshold.
+            state["noise_floor"] = (
+                (1 - NOISE_FLOOR_ALPHA) * state["noise_floor"]
+                + NOISE_FLOOR_ALPHA * max(rms, 0.0005)
+            )
+            state["pre_roll"].append(chunk)
+            return
+
+        if is_voice:
             if not state["is_speaking"]:
                 state["is_speaking"] = True
-                # Prepend pre-roll so we don't clip the first syllable
                 state["speech_buffer"] = list(state["pre_roll"])
+                state["quiet_frames"] = 0
+                state["total_frames"] = sum(len(item) for item in state["speech_buffer"])
+                state["voiced_frames"] = 0
 
-            state["silence_count"] = 0
+            state["quiet_frames"] = 0
+            state["voiced_frames"] += frames
             state["speech_buffer"].append(chunk)
-
+            state["total_frames"] += frames
         else:
-            # ── Silence detected ──────────────────────────────────
-            if state["is_speaking"]:
-                state["silence_count"] += 1
-                state["speech_buffer"].append(chunk)  # include trailing silence
+            state["quiet_frames"] += frames
+            state["speech_buffer"].append(chunk)
+            state["total_frames"] += frames
 
-                if state["silence_count"] >= SILENCE_FRAMES:
-                    # ── Flush complete utterance to queue ─────────
-                    utterance = np.concatenate(state["speech_buffer"])
-                    loop.call_soon_threadsafe(
-                        queue.put_nowait, utterance
-                    )
+        should_flush = (
+            state["quiet_frames"] >= quiet_frames_to_end
+            or state["total_frames"] >= max_utterance_frames
+        )
+        if not should_flush:
+            return
 
-                    # Reset state
-                    state["is_speaking"]   = False
-                    state["silence_count"] = 0
-                    state["speech_buffer"] = []
+        utterance = np.concatenate(state["speech_buffer"])
+        voiced_duration = state["voiced_frames"] / DEVICE_SAMPLE_RATE
+        if voiced_duration >= MIN_SPEECH_SECONDS:
+            loop.call_soon_threadsafe(
+                queue.put_nowait,
+                (utterance, DEVICE_SAMPLE_RATE),
+            )
 
-            else:
-                # Not speaking — maintain pre-roll ring buffer
-                state["pre_roll"].append(chunk)
-                if len(state["pre_roll"]) > PRE_ROLL_FRAMES:
-                    state["pre_roll"].pop(0)
+        state["is_speaking"] = False
+        state["quiet_frames"] = 0
+        state["total_frames"] = 0
+        state["voiced_frames"] = 0
+        state["speech_buffer"] = []
+        state["pre_roll"].clear()
 
-    # ── Dequeue and play continuously (no gap between chunks) ────
-    async def player_worker():
+    async def transcription_worker():
+        pending_text = ""
+        last_transcript_at = loop.time()
+
+        async def flush_sentences(force: bool = False):
+            nonlocal pending_text
+            sentences, pending_text = split_complete_sentences(pending_text)
+            if force and pending_text:
+                sentences.append(pending_text)
+                pending_text = ""
+            for sentence in sentences:
+                await websocket.send_text(f"Done processing {sentence}")
+
         while True:
-            utterance = await queue.get()
-            # utterance = normalize(utterance)
-            # logger.info(f"--> normalize: {utterance}")
-            duration = len(utterance) / SAMPLE_RATE
-            if duration < MIN_DURATION_SECONDS:
-                queue.task_done()
+            try:
+                utterance, source_rate = await asyncio.wait_for(
+                    queue.get(),
+                    timeout=SENTENCE_IDLE_FLUSH_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                if pending_text and loop.time() - last_transcript_at >= SENTENCE_IDLE_FLUSH_SECONDS:
+                    await flush_sentences(force=True)
                 continue
 
-            wav_bytes = to_wav_bytes(utterance, SAMPLE_RATE)
-            logger.info(f"--> wav bytes: {wav_bytes}")
             try:
-                transcript = openai_client.audio.transcriptions.create(
-                    model="gpt-4o-mini-transcribe",
-                    file=("audio.wav", wav_bytes, "audio/wav"),
-                    response_format="text",
-                    language="en"
+                utterance = trim_quiet_edges(utterance, source_rate)
+                voiced_duration = len(utterance) / source_rate
+                if voiced_duration < MIN_SPEECH_SECONDS or pcm16_rms(utterance) < TRIM_RMS_MIN:
+                    continue
+
+                # Most local microphones record most cleanly at 48 kHz. We keep
+                # VAD at that device rate, then resample only the accepted speech
+                # segment to 16 kHz mono PCM16 before creating the WAV for STT.
+                transcribe_audio = resample_pcm16(
+                    utterance,
+                    source_rate,
+                    TRANSCRIBE_SAMPLE_RATE,
                 )
+                wav_bytes = to_wav_bytes(transcribe_audio, TRANSCRIBE_SAMPLE_RATE)
+
+                # OpenAI's SDK call is synchronous. Running it in the executor
+                # keeps the websocket event loop responsive while transcription
+                # waits on network I/O.
+                transcript = await loop.run_in_executor(
+                    executor,
+                    lambda: openai_client.audio.transcriptions.create(
+                        model="gpt-4o-mini-transcribe",
+                        file=("audio.wav", wav_bytes, "audio/wav"),
+                        response_format="text",
+                        language="en",
+                    ),
+                )
+                transcript = transcript.strip()
+                if not transcript:
+                    continue
+
+                pending_text = f"{pending_text} {transcript}".strip()
+                last_transcript_at = loop.time()
+                await flush_sentences()
+            except WebSocketDisconnect:
+                raise
             except Exception as e:
-                transcript = ""
-                logger.error(e)
+                logger.exception("--> Transcription failed: %s", e)
+            finally:
+                queue.task_done()
 
-            await websocket.send_text(f"Done processing {transcript}")
-            queue.task_done()
-
-    # ── Keep InputStream alive while WebSocket is connected ──────
     async def receiver_worker():
+        # sounddevice opens a PortAudio stream on a native callback thread. The
+        # websocket handler itself remains asyncio-based; this coroutine simply
+        # keeps the stream alive until the client disconnects or the task ends.
         with sd.InputStream(
-            samplerate=SAMPLE_RATE,
-            channels=1,
-            dtype=np.int16,
-            callback=sd_callback
+            samplerate=DEVICE_SAMPLE_RATE,
+            blocksize=AUDIO_BLOCK_SIZE,
+            channels=CHANNELS,
+            dtype=DTYPE,
+            callback=sd_callback,
         ):
-            await asyncio.sleep(3600)  # holds the stream open
+            while True:
+                await asyncio.sleep(1)
 
-    await asyncio.gather(receiver_worker(), player_worker())
+    tasks = {
+        asyncio.create_task(receiver_worker()),
+        asyncio.create_task(transcription_worker()),
+    }
+    try:
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        for task in done:
+            task.result()
+    except WebSocketDisconnect:
+        logger.info("--> /ws/audio disconnected")
+    finally:
+        for task in tasks:
+            task.cancel()
 
 
 @app.websocket("/chat/ws/audio/{mode}")
