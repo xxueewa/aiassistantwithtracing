@@ -412,8 +412,11 @@ async def transcribe_websocket_server(websocket: WebSocket):
                 ):
                     if chunk.data and "messages" in chunk.data:
                         final_response = chunk.data["messages"][-1]
-
-                final_response = final_response["content"]
+                logger.info(f"Complete sentence: {final_response}")
+                if final_response["type"] == "human":
+                    final_response = "No Internet"
+                else:
+                    final_response = final_response["content"]
 
                 await websocket.send_text(final_response)
 
