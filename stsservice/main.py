@@ -5,6 +5,7 @@ import wave
 import base64
 import threading
 import logging
+from uuid import uuid4
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
@@ -127,6 +128,18 @@ def content_to_text(content) -> str:
             if isinstance(block, dict) and block.get("type") == "text"
         )
     return str(content or "")
+
+
+def build_websocket_event(event_type: str, **payload) -> dict:
+    return {"type": event_type, **payload}
+
+
+async def send_event(
+    websocket: WebSocket,
+    event_type: str,
+    **payload,
+) -> None:
+    await websocket.send_json(build_websocket_event(event_type, **payload))
 
 
 def generate_speech_wav(text: str) -> bytes:
@@ -326,19 +339,26 @@ def split_complete_sentences(buffer: str) -> tuple[list[str], str]:
     complete = [part.strip() for part in parts[:-1] if part.strip()]
     return complete, parts[-1].strip()
 
-@app.websocket("/ws/audio")
-@app.websocket("/ws/audio/{thread_id}")
+@app.websocket("/ws/audio/{thread_uuid}")
 async def transcribe_websocket_server(
     websocket: WebSocket,
-    thread_id: Optional[str] = None,
+    thread_uuid: str,
 ):
     await websocket.accept()
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
-    if thread_id is None:
-        thread = await client.threads.create(if_exists="do_nothing")
-        thread_id = thread["thread_id"]
+
+    thread = await client.threads.create(
+        thread_id=thread_uuid,
+        if_exists="do_nothing",
+    )
+    thread_id = thread["thread_id"]
     logger.info("--> /ws/audio connected on Thread ID: %s", thread_id)
+    await send_event(
+        websocket,
+        "session.ready",
+        thread_id=thread_id,
+    )
 
     quiet_frames_to_end = int(END_OF_UTTERANCE_SECONDS * DEVICE_SAMPLE_RATE)
     pre_roll_frames = max(1, int(PRE_ROLL_SECONDS * DEVICE_SAMPLE_RATE / AUDIO_BLOCK_SIZE))
@@ -428,26 +448,56 @@ async def transcribe_websocket_server(
                 sentences.append(pending_text)
                 pending_text = ""
             for sentence in sentences:
+                response_id = str(uuid4())
+                await send_event(
+                    websocket,
+                    "response.start",
+                    response_id=response_id,
+                )
 
-                final_response = None
-                async for chunk in client.runs.stream(
-                        thread_id,
-                        "assistant",
-                        input={"messages": [{"role": "human", "content": sentence}]},
-                        stream_mode="values",
-                ):
-                    if chunk.data and "messages" in chunk.data:
-                        final_response = chunk.data["messages"][-1]
+                try:
+                    final_response = None
+                    async for chunk in client.runs.stream(
+                            thread_id,
+                            "assistant",
+                            input={"messages": [{"role": "human", "content": sentence}]},
+                            stream_mode="values",
+                    ):
+                        if chunk.data and "messages" in chunk.data:
+                            final_response = chunk.data["messages"][-1]
+                except WebSocketDisconnect:
+                    raise
+                except Exception as exc:
+                    logger.exception("--> Agent response failed: %s", exc)
+                    await send_event(
+                        websocket,
+                        "error",
+                        code="AGENT_RESPONSE_FAILED",
+                        message="Unable to generate a response",
+                        response_id=response_id,
+                    )
+                    continue
+
                 logger.info(f"Complete sentence: {final_response}")
                 if not final_response:
                     response_text = "No response"
                 elif final_response["type"] == "human":
                     response_text = "No Internet"
                 else:
-                    # response_text = content_to_text(final_response["content"])
                     response_text = final_response["content"]
 
-                await websocket.send_text(response_text)
+                await send_event(
+                    websocket,
+                    "response.delta",
+                    response_id=response_id,
+                    delta=response_text,
+                )
+                await send_event(
+                    websocket,
+                    "response.done",
+                    response_id=response_id,
+                    text=response_text,
+                )
                 # if not response_text:
                 #     continue
                 #
@@ -493,15 +543,25 @@ async def transcribe_websocket_server(
                 # OpenAI's SDK call is synchronous. Running it in the executor
                 # keeps the websocket event loop responsive while transcription
                 # waits on network I/O.
-                transcript = await loop.run_in_executor(
-                    executor,
-                    lambda: openai_client.audio.transcriptions.create(
-                        model="gpt-4o-mini-transcribe",
-                        file=("audio.wav", wav_bytes, "audio/wav"),
-                        response_format="text",
-                        language="en",
-                    ),
-                )
+                try:
+                    transcript = await loop.run_in_executor(
+                        executor,
+                        lambda: openai_client.audio.transcriptions.create(
+                            model="gpt-4o-mini-transcribe",
+                            file=("audio.wav", wav_bytes, "audio/wav"),
+                            response_format="text",
+                            language="en",
+                        ),
+                    )
+                except Exception as exc:
+                    logger.exception("--> Transcription failed: %s", exc)
+                    await send_event(
+                        websocket,
+                        "error",
+                        code="TRANSCRIPTION_FAILED",
+                        message="Unable to transcribe audio",
+                    )
+                    continue
                 transcript = transcript.strip()
                 if not transcript:
                     continue
