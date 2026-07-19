@@ -608,6 +608,20 @@ async def transcribe_websocket_server(
             task.cancel()
 
 
+@app.post("/summarize")
+def summarize(req: ChatRequest):
+    PROMPT = f"You are going to summarize this sentence {req.message}. Keep the key information relating to location, schedule, meeting trip, etc. Keep the sentence less than 100 words."
+    summary = openai_client.chat.completions.create(
+        model = "gpt-5.6",
+        messages=[
+            {
+                "role": "user",
+                "content": PROMPT
+            }
+        ]
+    )
+    return summary.choices[0].message.content
+
 # @app.websocket("/chat/ws/audio/{mode}")
 # async def transcribe_websocket(websocket: WebSocket, mode: str):
 #     await websocket.accept()

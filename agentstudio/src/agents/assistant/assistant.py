@@ -69,7 +69,7 @@ def llm_call(state: LLMMessagesState) -> Dict[str, Any]:
     generated_result = model_with_tools.invoke(
                 [
                     SystemMessage(
-                        content="You are a helpful assistant tasked with resolving my questions. Use the assistant tool as necessary. Your name is Liam."
+                        content="You are a helpful assistant tasked with resolving my questions. Use the search and info retrieval tool as necessary. Keep the answer within 50 words. Your name is Liam."
                     )
                 ]
                 + state["summarized_messages"]
