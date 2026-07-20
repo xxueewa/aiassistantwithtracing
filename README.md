@@ -1,8 +1,11 @@
 ## BizTrip Voice Assistant
 
-|LangGraph|LangSmith|
-|---|---|
-|<img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/d1183de1-1b14-4207-b129-fb7d87fc48e4" />|<img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/e85f784a-861c-47c3-a26e-98964706e18d" />|
+<img width="800" height="450" alt="biztrip-product-showcase" src="https://github.com/user-attachments/assets/dffb029f-d8a4-4d97-8910-450d65ce7a01" />
+<br>
+
+|LangGraph|LangSmith|AWS|iOS|
+|---|---|---|---|
+|<img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/d1183de1-1b14-4207-b129-fb7d87fc48e4" />|<img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/e85f784a-861c-47c3-a26e-98964706e18d" />|<img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/80aed474-9e90-479b-9f8d-be7b01606405" />|<img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/eae87b04-b1c7-4f23-96da-cc25084607f6" />|
 
 <br>
 A voice-first travel companion of staff for business trips: it knows your itinerary, company policy, meetings, expenses, and local culture, and can take actions while you’re moving. 
