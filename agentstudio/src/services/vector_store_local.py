@@ -11,11 +11,18 @@ import logging
 import os
 from functools import cache
 from pydantic.types import SecretStr
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 embedding_model = os.environ.get("EMBEDDING_MODEL", "text-embedding-3-small")
 chat_model = os.environ.get("CHAT_MODEL", "gpt-4o-mini")
+
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,     # Target size in characters/tokens
+    chunk_overlap=15,   # Overlap to preserve context
+    separators=["\n\n", "\n", ".", "?", "!", " ", ""]
+)
 
 _CHROMA_DB_PATH = os.environ.get(
     "CHROMA_DB_PATH",
@@ -48,9 +55,10 @@ def upsert_documents(vs: Chroma, documents: list[Document]):
     Embed *documents* and add them to the OpenSearch index.
     The index is created automatically on first write if it does not exist.
     """
-    uuids = [str(uuid4()) for _ in range(len(documents))]
-    vs.add_documents(documents, ids=uuids)
-    logger.info("Upserted %d document(s) into index '%s'.", len(documents))
+    chunks = text_splitter.split_documents(documents)
+    uuids = [str(uuid4()) for _ in range(len(chunks))]
+    vs.add_documents(chunks, ids=uuids)
+    logger.info("Upserted %d document(s) into index '%s'.", len(chunks))
 
 # ── Document deletion ────────────────────────────────────────────────────────
 

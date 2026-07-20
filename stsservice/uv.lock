@@ -1066,6 +1066,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "sounddevice" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "websockets" },
 ]
 
 [package.metadata]
@@ -1079,6 +1080,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "sounddevice", specifier = ">=0.4.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
+    { name = "websockets", specifier = ">=16.0" },
 ]
 
 [[package]]
