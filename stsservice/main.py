@@ -492,26 +492,31 @@ async def transcribe_websocket_server(
                     response_id=response_id,
                     delta=response_text,
                 )
+
+                if response_text:
+                    # TTS is a synchronous OpenAI SDK call; keep it off the
+                    # event loop so the websocket stays responsive.
+                    try:
+                        audio_bytes = await loop.run_in_executor(
+                            executor,
+                            lambda text=response_text: generate_speech_wav(text),
+                        )
+                        await send_event(
+                            websocket,
+                            "response.audio",
+                            response_id=response_id,
+                            audio=base64.b64encode(audio_bytes).decode("ascii"),
+                            format="wav",
+                        )
+                    except Exception as exc:
+                        logger.exception("--> TTS generation failed: %s", exc)
+
                 await send_event(
                     websocket,
                     "response.done",
                     response_id=response_id,
                     text=response_text,
                 )
-                # if not response_text:
-                #     continue
-                #
-                # # TTS is another synchronous OpenAI SDK call. Generate the WAV
-                # # off the event loop, then send it as the binary frame following
-                # # the text frame so clients can render both modalities.
-                # try:
-                #     audio_bytes = await loop.run_in_executor(
-                #         executor,
-                #         lambda text=response_text: generate_speech_wav(text),
-                #     )
-                #     await websocket.send_bytes(audio_bytes)
-                # except Exception as e:
-                #     logger.exception("--> TTS generation failed: %s", e)
 
         while True:
             try:
