@@ -501,13 +501,16 @@ async def transcribe_websocket_server(
                             executor,
                             lambda text=response_text: generate_speech_wav(text),
                         )
+                        # Header frame carries the metadata; the WAV bytes
+                        # follow immediately as a raw binary frame so the
+                        # client doesn't pay base64 overhead on the audio.
                         await send_event(
                             websocket,
                             "response.audio",
                             response_id=response_id,
-                            audio=base64.b64encode(audio_bytes).decode("ascii"),
                             format="wav",
                         )
+                        await websocket.send_bytes(audio_bytes)
                     except Exception as exc:
                         logger.exception("--> TTS generation failed: %s", exc)
 
