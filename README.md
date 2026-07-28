@@ -43,3 +43,5 @@ Key challenges included:
 2. Designing an efficient RAG indexing and retrieval pipeline to balance correctness, relevance, and low latency.
 3. Structuring the agent graph around business travel subtasks, including planning, in-trip assistance, reimbursement, and follow-up management.
 4. Evaluating agent behavior across tool selection, retrieval quality, and final answer correctness.
+
+Check out the demo of MVP here: https://www.youtube.com/watch?v=qaN4FCIbzJA
